@@ -507,7 +507,7 @@ function updateTooltip() {
     return `<span class="${cls}">${arg}</span>`;
   }).join(', ');
 
-  const activeArgName = def.args[currentArg];
+  const activeArgName = def.args[currentArg] || def.args[def.args.length - 1];
   const activeDesc = activeArgName ? def.argDescs[activeArgName] || '' : '';
 
   box.innerHTML = `<span class="fn-name">${fnName}</span>(${argSpans})${activeDesc ? `<div class="desc">${activeDesc}</div>` : ''}`;
@@ -709,12 +709,11 @@ function evalExpr(expr) {
 
   function parseMulDiv() {
     let left = parseUnary();
-    while (peek() === '*' || peek() === '/' || peek() === '%') {
+    while (peek() === '*' || peek() === '/') {
       const op = consume();
       const right = parseUnary();
       if (op === '*') left = left * right;
-      else if (op === '/') left = left / right;
-      else left = left % right;
+      else left = left / right;
     }
     return left;
   }
@@ -782,19 +781,24 @@ function tokenize(expr) {
     const ch = expr[i];
     if (/\s/.test(ch)) { i++; continue; }
 
-    // Number (including decimals)
+    // Number (including decimals) — if followed by % treat as /100: 6% => 0.06
     if (/[0-9.]/.test(ch)) {
       let num = '';
       while (i < expr.length && /[0-9.]/.test(expr[i])) num += expr[i++];
-      tokens.push(parseFloat(num));
+      const val = parseFloat(num);
+      if (expr[i] === '%') { i++; tokens.push(val / 100); }
+      else { tokens.push(val); }
       continue;
     }
 
     // ** operator
     if (ch === '*' && expr[i+1] === '*') { tokens.push('**'); i += 2; continue; }
 
+    // Standalone % not after a number — error
+    if (ch === '%') { throw new Error('% must follow a number, e.g. 6% or 0.5%'); }
+
     // Single-char operators and parens
-    if ('+-*/^%()'.includes(ch)) { tokens.push(ch); i++; continue; }
+    if ('+-*/^()'.includes(ch)) { tokens.push(ch); i++; continue; }
 
     // Named functions / identifiers
     if (/[a-zA-Z]/.test(ch)) {
@@ -835,9 +839,12 @@ function parseArgs(str) {
 }
 
 function formatNumber(n) {
-  // Show up to 6 significant decimal places, remove trailing zeros
-  if (Number.isInteger(n)) return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+  // Mirror Excel's default display: 2 decimal places, thousands separator
+  // Use up to 10 decimals only when the 2-decimal version would show 0.00 for a non-zero result
+  if (n === 0) return '0.00';
+  const twoDecimal = Math.abs(n) >= 0.005;
+  const decimals = twoDecimal ? 2 : 10;
+  return n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 // ─── History ─────────────────────────────────────────────────────────────────

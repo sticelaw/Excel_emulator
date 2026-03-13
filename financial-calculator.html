@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Financial Function Calculator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f0f2f5;
+    --surface: #ffffff;
+    --surface2: #f7f8fa;
+    --border: #d0d4dc;
+    --border-focus: #1a6ed4;
+    --text: #1a1d23;
+    --text-muted: #6b7280;
+    --text-hint: #9ca3af;
+    --accent: #1a6ed4;
+    --accent-light: #e8f0fb;
+    --green: #166534;
+    --green-bg: #dcfce7;
+    --red: #991b1b;
+    --red-bg: #fee2e2;
+    --yellow-bg: #fefce8;
+    --yellow: #854d0e;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px;
+  }
+
+  header {
+    width: 100%;
+    max-width: 720px;
+    margin-bottom: 24px;
+  }
+
+  header h1 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  header p {
+    font-size: 13px;
+    color: var(--text-hint);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 720px;
+    overflow: visible;
+  }
+
+  /* Formula bar */
+  .formula-bar {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+    background: var(--surface2);
+    border-radius: 8px 8px 0 0;
+  }
+
+  .fx-label {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    flex-shrink: 0;
+    user-select: none;
+  }
+
+  .formula-input {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 14px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 7px 10px;
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .formula-input:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px rgba(26,110,212,0.12);
+  }
+
+  .calc-btn {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+
+  .calc-btn:hover { background: #1558b0; }
+
+  .clear-btn {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+
+  .clear-btn:hover { background: var(--surface2); color: var(--text); }
+
+  /* Tooltip */
+  .tooltip-area {
+    padding: 0 14px;
+    position: relative;
+    min-height: 0;
+  }
+
+  .tooltip-box {
+    display: none;
+    background: #1e2432;
+    color: #e2e8f0;
+    font-family: var(--mono);
+    font-size: 12px;
+    border-radius: 5px;
+    padding: 8px 12px;
+    margin-top: 6px;
+    line-height: 1.6;
+    border: 1px solid #374151;
+  }
+
+  .tooltip-box.visible { display: block; }
+
+  .tooltip-box .fn-name { color: #93c5fd; font-weight: 600; }
+  .tooltip-box .arg { color: #d1d5db; }
+  .tooltip-box .arg.active { color: #fbbf24; font-weight: 600; }
+  .tooltip-box .arg.optional { color: #9ca3af; font-style: italic; }
+  .tooltip-box .arg.active.optional { color: #fcd34d; }
+  .tooltip-box .desc { color: #6b7280; font-size: 11px; margin-top: 4px; font-family: var(--sans); }
+
+  /* Autocomplete dropdown */
+  .autocomplete {
+    display: none;
+    position: absolute;
+    top: 38px;
+    left: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    z-index: 100;
+    min-width: 200px;
+    overflow: hidden;
+  }
+
+  .autocomplete.visible { display: block; }
+
+  .autocomplete-item {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item:hover, .autocomplete-item.selected { background: var(--accent-light); }
+  .autocomplete-item .fn { color: var(--accent); font-weight: 600; }
+  .autocomplete-item .fn-desc { color: var(--text-muted); font-size: 11px; font-family: var(--sans); }
+
+  /* Result area */
+  .result-area {
+    padding: 16px 14px;
+    min-height: 64px;
+    display: flex;
+    align-items: center;
+  }
+
+  .result-placeholder {
+    color: var(--text-hint);
+    font-size: 13px;
+    font-style: italic;
+  }
+
+  .result-value {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--green);
+  }
+
+  .result-value.error {
+    color: var(--red);
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .result-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* History */
+  .history-area {
+    border-top: 1px solid var(--border);
+    max-height: 280px;
+    overflow-y: auto;
+  }
+
+  .history-header {
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-hint);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .history-clear {
+    background: none;
+    border: none;
+    font-size: 11px;
+    color: var(--text-hint);
+    cursor: pointer;
+    font-family: var(--sans);
+  }
+
+  .history-clear:hover { color: var(--red); }
+
+  .history-item {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .history-item:last-child { border-bottom: none; }
+  .history-item:hover { background: var(--surface2); }
+
+  .history-formula {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .history-result {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--green);
+  }
+
+  .history-result.error { color: var(--red); }
+
+  /* Reference panel */
+  .reference {
+    margin-top: 20px;
+    width: 100%;
+    max-width: 720px;
+  }
+
+  .reference h2 {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-hint);
+    margin-bottom: 10px;
+  }
+
+  .ref-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+  }
+
+  .ref-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .ref-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(26,110,212,0.08);
+  }
+
+  .ref-fn {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 3px;
+  }
+
+  .ref-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .hint {
+    font-size: 11px;
+    color: var(--text-hint);
+    margin-top: 10px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Financial Function Calculator</h1>
+  <p>Type an Excel formula below. Click a function card to insert a template.</p>
+</header>
+
+<div class="card">
+  <div class="formula-bar">
+    <span class="fx-label">ƒx</span>
+    <input
+      class="formula-input"
+      id="formulaInput"
+      type="text"
+      placeholder="=PV(rate, nper, pmt, [fv], [type])"
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <button class="clear-btn" onclick="clearInput()">Clear</button>
+    <button class="calc-btn" onclick="calculate()">Calculate</button>
+  </div>
+
+  <div class="tooltip-area" id="tooltipArea">
+    <div class="tooltip-box" id="tooltipBox"></div>
+    <div class="autocomplete" id="autocomplete"></div>
+  </div>
+
+  <div class="result-area" id="resultArea">
+    <div>
+      <div class="result-placeholder" id="resultPlaceholder">Enter a formula above and press Calculate or Enter</div>
+      <div class="result-value" id="resultValue" style="display:none"></div>
+      <div class="result-label" id="resultLabel" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="history-area" id="historyArea" style="display:none">
+    <div class="history-header">
+      History
+      <button class="history-clear" onclick="clearHistory()">Clear</button>
+    </div>
+    <div id="historyList"></div>
+  </div>
+</div>
+
+<div class="reference">
+  <h2>Available Functions — click to insert</h2>
+  <div class="ref-grid" id="refGrid"></div>
+</div>
+
+<p class="hint">Press Enter to calculate · Use commas to separate arguments · Negative numbers for cash outflows</p>
+
+<script>
+// ─── Function definitions ───────────────────────────────────────────────────
+const FUNCTIONS = {
+  PV: {
+    args: ['rate', 'nper', 'pmt', '[fv]', '[type]'],
+    required: 3,
+    desc: 'Present value of a series of future cash flows',
+    argDescs: {
+      rate: 'Interest rate per period',
+      nper: 'Total number of payment periods',
+      pmt: 'Payment made each period (negative = outflow)',
+      '[fv]': 'Future value after last payment (default 0)',
+      '[type]': '0 = end of period (default), 1 = beginning'
+    },
+    fn: (rate, nper, pmt, fv=0, type=0) => {
+      if (rate === 0) return -pmt * nper - fv;
+      const factor = Math.pow(1 + rate, nper);
+      return -(pmt * (1 + rate * type) * (factor - 1) / rate + fv) / factor;
+    }
+  },
+  FV: {
+    args: ['rate', 'nper', 'pmt', '[pv]', '[type]'],
+    required: 3,
+    desc: 'Future value of an investment',
+    argDescs: {
+      rate: 'Interest rate per period',
+      nper: 'Total number of payment periods',
+      pmt: 'Payment made each period',
+      '[pv]': 'Present value (default 0)',
+      '[type]': '0 = end of period (default), 1 = beginning'
+    },
+    fn: (rate, nper, pmt, pv=0, type=0) => {
+      if (rate === 0) return -pmt * nper - pv;
+      const factor = Math.pow(1 + rate, nper);
+      return -(pv * factor + pmt * (1 + rate * type) * (factor - 1) / rate);
+    }
+  },
+  NPV: {
+    args: ['rate', 'value1', 'value2', '...'],
+    required: 2,
+    desc: 'Net present value of cash flows',
+    argDescs: {
+      rate: 'Discount rate per period',
+      value1: 'First cash flow (period 1)',
+      value2: 'Second cash flow (period 2)',
+      '...': 'Additional cash flows'
+    },
+    fn: (...args) => {
+      const rate = args[0];
+      const flows = args.slice(1);
+      return flows.reduce((acc, cf, i) => acc + cf / Math.pow(1 + rate, i + 1), 0);
+    }
+  },
+
+};
+
+// ─── State ──────────────────────────────────────────────────────────────────
+let history = [];
+let autocompleteIndex = -1;
+
+// ─── Build reference cards ──────────────────────────────────────────────────
+const refGrid = document.getElementById('refGrid');
+Object.entries(FUNCTIONS).forEach(([name, def]) => {
+  const card = document.createElement('div');
+  card.className = 'ref-card';
+  card.innerHTML = `<div class="ref-fn">=${name}(${def.args.join(', ')})</div>`;
+  card.addEventListener('click', () => insertTemplate(name));
+  refGrid.appendChild(card);
+});
+
+// ─── Insert template ─────────────────────────────────────────────────────────
+function insertTemplate(name) {
+  const input = document.getElementById('formulaInput');
+  input.value = `=${name}(`;
+  input.focus();
+  updateTooltip();
+  hideAutocomplete();
+}
+
+// ─── Tooltip logic ───────────────────────────────────────────────────────────
+function updateTooltip() {
+  const raw = document.getElementById('formulaInput').value.trim();
+  const box = document.getElementById('tooltipBox');
+
+  // Parse which function and which arg position
+  const match = raw.match(/^=([A-Z]+)\(/i);
+  if (!match) { box.classList.remove('visible'); return; }
+
+  const fnName = match[1].toUpperCase();
+  const def = FUNCTIONS[fnName];
+  if (!def) { box.classList.remove('visible'); return; }
+
+  // Count commas after the opening paren to determine current arg index
+  const afterParen = raw.slice(raw.indexOf('(') + 1);
+  const currentArg = countCommas(afterParen);
+
+  const argSpans = def.args.map((arg, i) => {
+    let cls = 'arg';
+    if (arg.startsWith('[')) cls += ' optional';
+    if (i === currentArg) cls += ' active';
+    return `<span class="${cls}">${arg}</span>`;
+  }).join(', ');
+
+  const activeArgName = def.args[currentArg];
+  const activeDesc = activeArgName ? def.argDescs[activeArgName] || '' : '';
+
+  box.innerHTML = `<span class="fn-name">${fnName}</span>(${argSpans})${activeDesc ? `<div class="desc">${activeDesc}</div>` : ''}`;
+  box.classList.add('visible');
+}
+
+function countCommas(str) {
+  // Count top-level commas (not inside nested parens)
+  let depth = 0, count = 0;
+  for (const ch of str) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    else if (ch === ',' && depth === 0) count++;
+  }
+  return count;
+}
+
+// ─── Autocomplete logic ──────────────────────────────────────────────────────
+function updateAutocomplete() {
+  const raw = document.getElementById('formulaInput').value;
+  const ac = document.getElementById('autocomplete');
+
+  // Only show if we have =XX without an open paren yet
+  const match = raw.match(/^=([A-Z]*)$/i);
+  if (!match || match[1].length === 0) { hideAutocomplete(); return; }
+
+  const prefix = match[1].toUpperCase();
+  const matches = Object.entries(FUNCTIONS).filter(([n]) => n.startsWith(prefix));
+
+  if (matches.length === 0 || (matches.length === 1 && matches[0][0] === prefix)) {
+    hideAutocomplete(); return;
+  }
+
+  ac.innerHTML = '';
+  autocompleteIndex = -1;
+  matches.forEach(([name, def], i) => {
+    const item = document.createElement('div');
+    item.className = 'autocomplete-item';
+    item.innerHTML = `<span class="fn">${name}</span>`;
+    item.addEventListener('mousedown', (e) => { e.preventDefault(); insertTemplate(name); });
+    ac.appendChild(item);
+  });
+
+  ac.classList.add('visible');
+}
+
+function hideAutocomplete() {
+  document.getElementById('autocomplete').classList.remove('visible');
+  autocompleteIndex = -1;
+}
+
+// ─── Input handlers ──────────────────────────────────────────────────────────
+document.getElementById('formulaInput').addEventListener('input', () => {
+  updateTooltip();
+  updateAutocomplete();
+});
+
+document.getElementById('formulaInput').addEventListener('keydown', (e) => {
+  const ac = document.getElementById('autocomplete');
+  const items = ac.querySelectorAll('.autocomplete-item');
+
+  if (ac.classList.contains('visible') && items.length > 0) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      autocompleteIndex = Math.min(autocompleteIndex + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('selected', i === autocompleteIndex));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      autocompleteIndex = Math.max(autocompleteIndex - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('selected', i === autocompleteIndex));
+      return;
+    }
+    if (e.key === 'Tab' || e.key === 'Enter') {
+      if (autocompleteIndex >= 0) {
+        e.preventDefault();
+        const name = Object.keys(FUNCTIONS)[autocompleteIndex] || items[autocompleteIndex].querySelector('.fn').textContent;
+        // find matching fn name
+        const matchedName = [...items[autocompleteIndex].querySelectorAll('.fn')][0].textContent;
+        insertTemplate(matchedName);
+        return;
+      }
+    }
+  }
+
+  if (e.key === 'Enter') { e.preventDefault(); calculate(); }
+  if (e.key === 'Escape') { hideAutocomplete(); }
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#tooltipArea') && !e.target.closest('.formula-input')) {
+    hideAutocomplete();
+  }
+});
+
+// ─── Core calculator ─────────────────────────────────────────────────────────
+function calculate() {
+  const raw = document.getElementById('formulaInput').value.trim();
+  const { value, label, error } = evaluate(raw);
+
+  const placeholder = document.getElementById('resultPlaceholder');
+  const resultVal = document.getElementById('resultValue');
+  const resultLabel = document.getElementById('resultLabel');
+
+  placeholder.style.display = 'none';
+  resultVal.style.display = 'block';
+
+  if (error) {
+    resultVal.className = 'result-value error';
+    resultVal.textContent = error;
+    resultLabel.style.display = 'none';
+    addHistory(raw, error, true);
+  } else {
+    resultVal.className = 'result-value';
+    resultVal.textContent = formatNumber(value);
+    if (label) {
+      resultLabel.style.display = 'block';
+      resultLabel.textContent = label;
+    } else {
+      resultLabel.style.display = 'none';
+    }
+    addHistory(raw, formatNumber(value), false);
+  }
+}
+
+function evaluate(raw) {
+  if (!raw) return { error: 'Please enter a formula.' };
+
+  let expr = raw.trim();
+
+  // Support with or without leading =
+  if (expr.startsWith('=')) expr = expr.slice(1);
+
+  // Try to parse as function call
+  const fnMatch = expr.match(/^([A-Z]+)\s*\((.*)\)\s*$/is);
+  if (fnMatch) {
+    const fnName = fnMatch[1].toUpperCase();
+    const def = FUNCTIONS[fnName];
+    if (!def) return { error: `#NAME? Unknown function: ${fnName}` };
+
+    const argStr = fnMatch[2].trim();
+    let args;
+    try {
+      args = parseArgs(argStr);
+    } catch(e) {
+      return { error: `#VALUE? Could not parse arguments: ${e.message}` };
+    }
+
+    if (args.length < def.required) {
+      return { error: `#VALUE? ${fnName} requires at least ${def.required} argument(s), got ${args.length}` };
+    }
+
+    let result;
+    try {
+      result = def.fn(...args);
+    } catch(e) {
+      return { error: `#NUM! Calculation error: ${e.message}` };
+    }
+
+    if (!isFinite(result) || isNaN(result)) {
+      return { error: '#NUM! Result is not a finite number. Check your inputs.' };
+    }
+
+    return { value: result, label: `=${raw.startsWith('=') ? raw : '=' + raw}` };
+  }
+
+  // Try plain arithmetic
+  try {
+    // Safe eval substitute — only allow numbers and operators
+    const safe = expr.replace(/[^0-9+\-*/().%^ ]/g, '');
+    if (safe !== expr.replace(/\s/g, '')) return { error: '#NAME? Unrecognized expression. Start with a function name like PV, FV, PMT...' };
+    // eslint-disable-next-line no-new-func
+    const result = Function('"use strict"; return (' + safe + ')')();
+    if (!isFinite(result) || isNaN(result)) return { error: '#NUM! Result is not a finite number.' };
+    return { value: result };
+  } catch(e) {
+    return { error: '#NAME? Unrecognized formula. Try: =PV(0.05, 10, -100)' };
+  }
+}
+
+function parseArgs(str) {
+  // Split on top-level commas
+  const args = [];
+  let depth = 0, current = '';
+  for (const ch of str) {
+    if (ch === '(') { depth++; current += ch; }
+    else if (ch === ')') { depth--; current += ch; }
+    else if (ch === ',' && depth === 0) {
+      args.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim() !== '') args.push(current.trim());
+
+  return args.map((a, i) => {
+    if (a === '' || a === undefined) return 0; // treat blank as 0
+    const n = Number(a);
+    if (isNaN(n)) throw new Error(`Argument ${i+1} ("${a}") is not a number`);
+    return n;
+  });
+}
+
+function formatNumber(n) {
+  // Show up to 6 significant decimal places, remove trailing zeros
+  if (Number.isInteger(n)) return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+}
+
+// ─── History ─────────────────────────────────────────────────────────────────
+function addHistory(formula, result, isError) {
+  history.unshift({ formula, result, isError });
+  if (history.length > 20) history.pop();
+  renderHistory();
+}
+
+function renderHistory() {
+  const area = document.getElementById('historyArea');
+  const list = document.getElementById('historyList');
+  if (history.length === 0) { area.style.display = 'none'; return; }
+  area.style.display = 'block';
+  list.innerHTML = '';
+  history.forEach(({ formula, result, isError }) => {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.innerHTML = `
+      <span class="history-formula">${escHtml(formula)}</span>
+      <span class="history-result ${isError ? 'error' : ''}">${escHtml(result)}</span>
+    `;
+    item.addEventListener('click', () => {
+      document.getElementById('formulaInput').value = formula;
+      updateTooltip();
+      hideAutocomplete();
+      document.getElementById('formulaInput').focus();
+    });
+    list.appendChild(item);
+  });
+}
+
+function clearHistory() {
+  history = [];
+  renderHistory();
+}
+
+function clearInput() {
+  const input = document.getElementById('formulaInput');
+  input.value = '';
+  input.focus();
+  document.getElementById('tooltipBox').classList.remove('visible');
+  hideAutocomplete();
+  document.getElementById('resultPlaceholder').style.display = 'block';
+  document.getElementById('resultValue').style.display = 'none';
+  document.getElementById('resultLabel').style.display = 'none';
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>

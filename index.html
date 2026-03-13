@@ -809,8 +809,8 @@ function tokenize(expr) {
   return tokens;
 }
 
-
-  // Split on top-level commas
+function parseArgs(str) {
+  // Split on top-level commas only (not commas inside nested parens)
   const args = [];
   let depth = 0, current = '';
   for (const ch of str) {

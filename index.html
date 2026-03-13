@@ -675,21 +675,141 @@ function evaluate(raw) {
     return { value: result, label: `=${raw.startsWith('=') ? raw : '=' + raw}` };
   }
 
-  // Try plain arithmetic
+  // Try plain arithmetic via the same safe expression evaluator
   try {
-    // Safe eval substitute — only allow numbers and operators
-    const safe = expr.replace(/[^0-9+\-*/().%^ ]/g, '');
-    if (safe !== expr.replace(/\s/g, '')) return { error: '#NAME? Unrecognized expression. Start with a function name like PV, FV, PMT...' };
-    // eslint-disable-next-line no-new-func
-    const result = Function('"use strict"; return (' + safe + ')')();
+    const result = evalExpr(expr);
     if (!isFinite(result) || isNaN(result)) return { error: '#NUM! Result is not a finite number.' };
     return { value: result };
   } catch(e) {
-    return { error: '#NAME? Unrecognized formula. Try: =PV(0.05, 10, -100)' };
+    return { error: '#NAME? Unrecognized formula. Try: =PV(0.05, 10, -100) or =PV(0.06/2, 10*2, -100)' };
   }
 }
 
-function parseArgs(str) {
+function evalExpr(expr) {
+  // Tokenize and parse a safe math expression.
+  // Supports: numbers, +, -, *, /, ^, **, unary minus, parentheses,
+  // and common math functions: sqrt, abs, log, ln, exp, round, floor, ceil
+  const tokens = tokenize(expr);
+  let pos = 0;
+
+  function peek() { return tokens[pos]; }
+  function consume() { return tokens[pos++]; }
+
+  function parseExpr() { return parseAddSub(); }
+
+  function parseAddSub() {
+    let left = parseMulDiv();
+    while (peek() === '+' || peek() === '-') {
+      const op = consume();
+      const right = parseMulDiv();
+      left = op === '+' ? left + right : left - right;
+    }
+    return left;
+  }
+
+  function parseMulDiv() {
+    let left = parseUnary();
+    while (peek() === '*' || peek() === '/' || peek() === '%') {
+      const op = consume();
+      const right = parseUnary();
+      if (op === '*') left = left * right;
+      else if (op === '/') left = left / right;
+      else left = left % right;
+    }
+    return left;
+  }
+
+  function parseUnary() {
+    if (peek() === '-') { consume(); return -parsePower(); }
+    if (peek() === '+') { consume(); return parsePower(); }
+    return parsePower();
+  }
+
+  function parsePower() {
+    let base = parseAtom();
+    if (peek() === '^' || peek() === '**') {
+      consume();
+      const exp = parseUnary(); // right-associative
+      base = Math.pow(base, exp);
+    }
+    return base;
+  }
+
+  function parseAtom() {
+    const t = peek();
+    if (t === undefined) throw new Error('Unexpected end of expression');
+
+    // Parenthesized expression
+    if (t === '(') {
+      consume();
+      const val = parseExpr();
+      if (peek() !== ')') throw new Error('Missing closing parenthesis');
+      consume();
+      return val;
+    }
+
+    // Math functions
+    const mathFns = {
+      sqrt: Math.sqrt, abs: Math.abs, log: Math.log10,
+      ln: Math.log, exp: Math.exp, round: Math.round,
+      floor: Math.floor, ceil: Math.ceil
+    };
+    if (typeof t === 'string' && mathFns[t.toLowerCase()]) {
+      consume();
+      if (peek() !== '(') throw new Error(`Expected "(" after ${t}`);
+      consume();
+      const val = parseExpr();
+      if (peek() !== ')') throw new Error(`Missing closing ")" after ${t}(...)`);
+      consume();
+      return mathFns[t.toLowerCase()](val);
+    }
+
+    // Number
+    if (typeof t === 'number') { consume(); return t; }
+
+    throw new Error(`Unexpected token: "${t}"`);
+  }
+
+  const result = parseExpr();
+  if (pos < tokens.length) throw new Error(`Unexpected token: "${tokens[pos]}"`);
+  return result;
+}
+
+function tokenize(expr) {
+  const tokens = [];
+  let i = 0;
+  while (i < expr.length) {
+    const ch = expr[i];
+    if (/\s/.test(ch)) { i++; continue; }
+
+    // Number (including decimals)
+    if (/[0-9.]/.test(ch)) {
+      let num = '';
+      while (i < expr.length && /[0-9.]/.test(expr[i])) num += expr[i++];
+      tokens.push(parseFloat(num));
+      continue;
+    }
+
+    // ** operator
+    if (ch === '*' && expr[i+1] === '*') { tokens.push('**'); i += 2; continue; }
+
+    // Single-char operators and parens
+    if ('+-*/^%()'.includes(ch)) { tokens.push(ch); i++; continue; }
+
+    // Named functions / identifiers
+    if (/[a-zA-Z]/.test(ch)) {
+      let name = '';
+      while (i < expr.length && /[a-zA-Z0-9_]/.test(expr[i])) name += expr[i++];
+      tokens.push(name);
+      continue;
+    }
+
+    throw new Error(`Unrecognized character: "${ch}"`);
+  }
+  return tokens;
+}
+
+
   // Split on top-level commas
   const args = [];
   let depth = 0, current = '';
@@ -707,9 +827,10 @@ function parseArgs(str) {
 
   return args.map((a, i) => {
     if (a === '' || a === undefined) return 0; // treat blank as 0
-    const n = Number(a);
-    if (isNaN(n)) throw new Error(`Argument ${i+1} ("${a}") is not a number`);
-    return n;
+    const result = evalExpr(a.trim());
+    if (!isFinite(result) || isNaN(result))
+      throw new Error(`Argument ${i+1} ("${a}") could not be evaluated`);
+    return result;
   });
 }
 
